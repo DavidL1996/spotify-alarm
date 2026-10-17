@@ -1,13 +1,19 @@
 {
   "expo": {
-    "name": "spotify-alarm",
+    "name": "Spotify Alarm",
     "slug": "spotify-alarm",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.davidljungberg.spotifyalarm",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "spotify"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,6 +26,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "@react-native-community/datetimepicker"
+    ],
+    "scheme": "spotifyalarm",
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }
