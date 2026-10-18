@@ -60,8 +60,10 @@ Optional: `"redirectUri": "spotifyalarm-auth://spotify-login-callback"` if you c
 The default is `spotifyalarm://spotify-login-callback`.
 
 Alternatively leave `clientId` empty and set the environment variable **`SPOTIFY_CLIENT_ID`** where
-`npx expo prebuild` runs, e.g. as a GitHub Actions secret passed to the build step. The env variable wins
-over `app.json`. The Client ID isn't really a secret, so committing it is fine too.
+`npx expo prebuild` runs. The GitHub iOS workflow already passes it from a repository **variable**:
+on GitHub go to Settings → Secrets and variables → Actions → **Variables** tab → New repository variable,
+name `SPOTIFY_CLIENT_ID`. The env variable wins over `app.json`. The Client ID isn't really a secret,
+so committing it in `app.json` is fine too.
 
 The value is written to `Info.plist` during prebuild, so **changing it needs a new build**. A JS-only
 reload isn't enough.

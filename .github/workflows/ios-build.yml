@@ -71,6 +71,11 @@ jobs:
         run: npm ci
 
       - name: Generate native iOS project (expo prebuild)
+        # Spotify Client ID from the repo's Actions variables (Settings > Secrets and variables >
+        # Actions > Variables). It isn't a secret, but this keeps it out of the code. If it's unset,
+        # the build still works and tapping an alarm just opens the playlist (docs/spotify-setup.md).
+        env:
+          SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID }}
         run: npx expo prebuild --platform ios --clean --no-install
 
       - name: Detect workspace and scheme
