@@ -13,8 +13,8 @@ import {
   View,
 } from 'react-native';
 
+import { scheduleTestAlarm } from '@/lib/alarm-scheduler';
 import { useAlarms } from '@/lib/alarms-store';
-import { scheduleTestAlarm } from '@/lib/notifications';
 import { openPlaylistInSpotify, parsePlaylistId, playlistWebUrl } from '@/lib/spotify';
 import { DAY_SHORT, describeRepeat, formatTime, WEEK_ORDER } from '@/lib/time';
 import { useTheme } from '@/lib/theme';
@@ -86,7 +86,7 @@ export default function EditAlarmScreen() {
     if (allowed) {
       Alert.alert('Test alarm in 5 seconds', 'Lock your phone or go to the home screen to see it like a real alarm.');
     } else {
-      Alert.alert('Notifications are off', 'Allow notifications for Expo Go in Settings, then try again.');
+      Alert.alert('Alarms are off', 'Allow alarms or notifications for this app in Settings, then try again.');
     }
   };
 

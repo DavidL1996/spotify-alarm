@@ -66,6 +66,13 @@ src/
 | XAML page | a `.tsx` file that returns JSX |
 | `[Route("alarm/{id}")]` | the file `src/app/alarm/[id].tsx` |
 
+## AlarmKit (iOS 26+, development build only)
+
+`modules/alarm-kit` is a small local Expo module for Apple's AlarmKit. In a dev build on iOS 26+, alarms become real system alarms: they ring in silent mode and Focus, and show a **Play Spotify** button that opens the app and starts the playlist. In Expo Go, on Android, or if you say no to the "Alarms" prompt, the app keeps using notifications (`src/lib/alarm-scheduler.ts` decides which one to use).
+
+- `modules/alarm-kit/app.plugin.js` adds `NSAlarmKitUsageDescription` to Info.plist, and adds the button's App Intent (`SpotifyAlarmOpenIntent.swift`) to the app target during prebuild.
+- No widget extension is needed, because these alarms have no countdown.
+
 ## Next steps
 
 - ~~**Step 2:** local notifications for each enabled alarm.~~ Done. A custom alarm sound needs a development build, so it moves to step 3.

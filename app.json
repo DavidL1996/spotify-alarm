@@ -36,7 +36,8 @@
         {
           "clientId": ""
         }
-      ]
+      ],
+      "./modules/alarm-kit/app.plugin.js"
     ],
     "scheme": "spotifyalarm",
     "experiments": {

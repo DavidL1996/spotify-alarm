@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
-import { syncAlarmNotifications } from './notifications';
+import { syncAlarms } from './alarm-scheduler';
 import { nextOccurrence } from './time';
 import type { Alarm, NewAlarm } from './types';
 
@@ -15,6 +15,8 @@ type AlarmsContextValue = {
   loaded: boolean;
   /** False if the user blocked notifications (alarms can't ring). Null until we know. */
   notificationsAllowed: boolean | null;
+  /** True if iOS AlarmKit alarms were turned off for this app (we fall back to notifications). */
+  alarmKitDenied: boolean;
   addAlarm: (alarm: NewAlarm) => Promise<Alarm>;
   updateAlarm: (id: string, changes: Partial<NewAlarm>) => Promise<void>;
   removeAlarm: (id: string) => Promise<void>;
@@ -64,6 +66,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [notificationsAllowed, setNotificationsAllowed] = useState<boolean | null>(null);
+  const [alarmKitDenied, setAlarmKitDenied] = useState(false);
 
   // Latest list, for code that runs outside a render (the app-foreground listener below).
   const alarmsRef = useRef(alarms);
@@ -111,12 +114,15 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     return () => subscription.remove();
   }, [save]);
 
-  // Keep the phone's scheduled notifications in step with the alarm list.
+  // Keep the phone's scheduled alarms (AlarmKit or notifications) in step with the alarm list.
   useEffect(() => {
     if (!loaded) return;
-    syncAlarmNotifications(alarms)
-      .then(setNotificationsAllowed)
-      .catch((error) => console.warn('Could not schedule alarm notifications', error));
+    syncAlarms(alarms)
+      .then((result) => {
+        setNotificationsAllowed(result.canRing);
+        setAlarmKitDenied(result.alarmKitDenied);
+      })
+      .catch((error) => console.warn('Could not schedule alarms', error));
   }, [alarms, loaded]);
 
   const addAlarm = useCallback(
@@ -145,8 +151,8 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
   const getAlarm = useCallback((id: string) => alarms.find((a) => a.id === id), [alarms]);
 
   const value = useMemo(
-    () => ({ alarms, loaded, notificationsAllowed, addAlarm, updateAlarm, removeAlarm, getAlarm }),
-    [alarms, loaded, notificationsAllowed, addAlarm, updateAlarm, removeAlarm, getAlarm],
+    () => ({ alarms, loaded, notificationsAllowed, alarmKitDenied, addAlarm, updateAlarm, removeAlarm, getAlarm }),
+    [alarms, loaded, notificationsAllowed, alarmKitDenied, addAlarm, updateAlarm, removeAlarm, getAlarm],
   );
 
   return <AlarmsContext.Provider value={value}>{children}</AlarmsContext.Provider>;
