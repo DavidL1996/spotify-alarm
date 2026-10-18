@@ -1,4 +1,4 @@
-# Spotify Alarm — step 1
+# Spotify Alarm — step 2
 
 An Expo (React Native + TypeScript) app you can build on Windows and run on your iPhone through **Expo Go**. No Mac and no paid Apple account needed for this step.
 
@@ -7,8 +7,11 @@ What works now:
 - Add / edit / delete alarms: 24-hour time picker, repeat days (Mon–Sun), label
 - Paste a Spotify playlist link per alarm, with a **Test: open in Spotify** button
 - Alarms are saved on the phone (AsyncStorage), and the app follows light/dark mode
+- **Alarms ring as notifications** (`expo-notifications`): weekly for repeating alarms, once for one-time alarms (which switch themselves off afterwards, like the Clock app)
+- Tapping the notification opens the alarm's playlist in Spotify
+- **Test alarm in 5 seconds** button on the edit screen, and a warning on the list if notifications are blocked
 
-Not yet: the alarm doesn't actually ring. That's step 2 (`expo-notifications`) and step 3 (AlarmKit + Spotify SDK).
+Limits of step 2: it's a normal notification, so it plays the short default sound once. It's silent when the phone is on silent or in a Focus mode, and Spotify only starts when you tap it. Step 3 (AlarmKit + Spotify SDK) fixes that.
 
 ## Run it (Windows)
 
@@ -46,6 +49,7 @@ src/
     alarms-store.tsx      load/save alarms + useAlarms() hook
     time.ts               formatting + "next occurrence" logic
     spotify.ts            parse playlist links, open Spotify
+    notifications.ts      schedule alarm notifications, open Spotify on tap
     theme.ts              light/dark colours
 ```
 
@@ -62,5 +66,5 @@ src/
 
 ## Next steps
 
-- **Step 2:** `npx expo install expo-notifications`, then schedule a local notification with a custom sound for each enabled alarm. Still runs in Expo Go.
+- ~~**Step 2:** local notifications for each enabled alarm.~~ Done. A custom alarm sound needs a development build, so it moves to step 3.
 - **Step 3 (needs Apple Developer account + EAS dev build):** native module for AlarmKit + Spotify iOS SDK shuffle-play.

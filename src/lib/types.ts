@@ -18,6 +18,11 @@ export type Alarm = {
   playlistId: string | null;
   /** Optional friendly name the user typed for the playlist. */
   playlistName: string;
+  /**
+   * One-time alarms only: when it rings, as a timestamp (ms). Set automatically by the store.
+   * Null for repeating or disabled alarms. Missing on alarms saved before step 2.
+   */
+  onceAt?: number | null;
 };
 
-export type NewAlarm = Omit<Alarm, 'id'>;
+export type NewAlarm = Omit<Alarm, 'id' | 'onceAt'>;

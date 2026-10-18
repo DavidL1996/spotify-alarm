@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import { useAlarms } from '@/lib/alarms-store';
+import { scheduleTestAlarm } from '@/lib/notifications';
 import { openPlaylistInSpotify, parsePlaylistId, playlistWebUrl } from '@/lib/spotify';
 import { DAY_SHORT, describeRepeat, formatTime, WEEK_ORDER } from '@/lib/time';
 import { useTheme } from '@/lib/theme';
@@ -71,6 +72,22 @@ export default function EditAlarmScreen() {
     if (existing) await updateAlarm(existing.id, data);
     else await addAlarm({ ...data, enabled: true });
     router.back();
+  };
+
+  const onTestAlarm = async () => {
+    const allowed = await scheduleTestAlarm({
+      id: existing?.id ?? 'test',
+      label: label.trim(),
+      hour: time.getHours(),
+      minute: time.getMinutes(),
+      playlistId,
+      playlistName: playlistName.trim(),
+    });
+    if (allowed) {
+      Alert.alert('Test alarm in 5 seconds', 'Lock your phone or go to the home screen to see it like a real alarm.');
+    } else {
+      Alert.alert('Notifications are off', 'Allow notifications for Expo Go in Settings, then try again.');
+    }
   };
 
   const onDelete = () => {
@@ -212,6 +229,13 @@ export default function EditAlarmScreen() {
               <Text style={[styles.buttonText, { color: theme.accentText }]}>Test: open in Spotify</Text>
             </Pressable>
           )}
+
+          <Pressable
+            onPress={onTestAlarm}
+            style={({ pressed }) => [styles.button, { backgroundColor: theme.card, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Text style={[styles.buttonText, { color: theme.accent }]}>Test alarm in 5 seconds</Text>
+          </Pressable>
 
           {!isNew && (
             <Pressable onPress={onDelete} style={[styles.button, styles.deleteButton, { backgroundColor: theme.card }]}>

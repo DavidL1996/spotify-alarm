@@ -1,3 +1,4 @@
+import * as Linking from 'expo-linking';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -10,7 +11,7 @@ import { useTheme } from '@/lib/theme';
 export default function AlarmListScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const { alarms, loaded, updateAlarm } = useAlarms();
+  const { alarms, loaded, notificationsAllowed, updateAlarm } = useAlarms();
 
   // Re-render once a minute so "Rings in ..." stays accurate.
   const [now, setNow] = useState(() => new Date());
@@ -53,9 +54,23 @@ export default function AlarmListScreen() {
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListHeaderComponent={
-            nextAlarm ? (
-              <Text style={[styles.next, { color: theme.muted }]}>{describeTimeUntil(nextAlarm, now)}</Text>
-            ) : undefined
+            <>
+              {notificationsAllowed === false && (
+                <Pressable
+                  onPress={() => Linking.openSettings()}
+                  style={[styles.warning, { backgroundColor: theme.card, borderColor: theme.danger }]}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.warningTitle, { color: theme.danger }]}>Notifications are off</Text>
+                  <Text style={[styles.warningText, { color: theme.text }]}>
+                    Your alarms can’t ring. Tap to open Settings and allow notifications.
+                  </Text>
+                </Pressable>
+              )}
+              {nextAlarm && (
+                <Text style={[styles.next, { color: theme.muted }]}>{describeTimeUntil(nextAlarm, now)}</Text>
+              )}
+            </>
           }
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -83,6 +98,9 @@ const styles = StyleSheet.create({
   list: { padding: 16, paddingBottom: 48 },
   addButton: { fontSize: 28, fontWeight: '400', paddingHorizontal: 4 },
   next: { fontSize: 15, marginBottom: 12, marginLeft: 4 },
+  warning: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 16, gap: 4 },
+  warningTitle: { fontSize: 15, fontWeight: '600' },
+  warningText: { fontSize: 14, lineHeight: 19 },
   empty: { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32, gap: 8 },
   emptyTitle: { fontSize: 20, fontWeight: '600' },
   emptyText: { fontSize: 15, textAlign: 'center', lineHeight: 21 },

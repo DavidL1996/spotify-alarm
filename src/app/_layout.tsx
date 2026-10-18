@@ -2,11 +2,15 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { AlarmsProvider } from '@/lib/alarms-store';
+import { configureNotifications, useOpenSpotifyOnNotificationTap } from '@/lib/notifications';
 import { useTheme } from '@/lib/theme';
+
+configureNotifications();
 
 // Root layout: every screen in src/app is rendered inside this Stack navigator.
 export default function RootLayout() {
   const theme = useTheme();
+  useOpenSpotifyOnNotificationTap();
 
   return (
     <AlarmsProvider>
