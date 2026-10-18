@@ -142,6 +142,12 @@ jobs:
             build > build/xcodebuild.log 2>&1 || {
               echo "::error::xcodebuild failed. First errors (full log is uploaded as an artifact):"
               grep -E '(error:|\*\* BUILD FAILED)' build/xcodebuild.log | head -n 50 || true
+              # Also publish the first distinct compiler errors as annotations. Those are public on the
+              # run page and readable through the GitHub API without logging in (job logs are not).
+              grep -E ' error: ' build/xcodebuild.log | sed -E 's#^.*/(modules|ios|node_modules)/#\1/#' \
+                | awk '!seen[$0]++' | head -n 9 | while IFS= read -r line; do
+                  echo "::error title=xcodebuild::${line:0:900}"
+                done || true
               tail -n 80 build/xcodebuild.log
               exit 1
             }
