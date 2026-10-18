@@ -1,0 +1,221 @@
+# Builds an UNSIGNED iOS development build (.ipa) on a GitHub macOS runner.
+# Sign + install it from Windows with Sideloadly (see docs/ios-sideload.md).
+#
+# No Expo/EAS account or Apple credentials are needed: this is plain
+# `expo prebuild` + CocoaPods + `xcodebuild` with code signing disabled.
+#
+# Runner / Xcode choice (checked Oct 2026):
+#   https://github.com/actions/runner-images  -> "macOS 26 Arm64" image, YAML label `macos-26`
+#   https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md
+#     -> Xcode 26.0.1 ... 26.6 installed as /Applications/Xcode_26.x.app (26.6 default),
+#        iOS SDKs 26.x, CocoaPods 1.17.
+#   AlarmKit needs the iOS 26 SDK, so we pin `macos-26` (not `macos-latest`, which moves)
+#   and explicitly select the newest /Applications/Xcode_26*.app. We glob instead of
+#   hard-coding 26.6 because the image replaces old patch versions.
+#
+# macOS minutes cost 10x on private repos, so this only runs when native-relevant
+# files change (or when started by hand), and superseded runs are cancelled.
+name: iOS dev build (unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "modules/**"
+      - "plugins/**"
+      - "app.json"
+      - "app.config.*"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ios-build.yml"
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios-device:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      IPA_NAME: SpotifyAlarm-dev-unsigned.ipa
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)"
+          echo "Using $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iphoneos SDK: $SDK_VERSION"
+          case "$SDK_VERSION" in
+            26.*|2[7-9].*) ;;
+            *) echo "::error::iOS SDK $SDK_VERSION is older than 26 (AlarmKit needs 26)"; exit 1 ;;
+          esac
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Generate native iOS project (expo prebuild)
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Detect workspace and scheme
+        id: xcode
+        run: |
+          set -euo pipefail
+          # Prebuild names the project after app.json "name" with non-alphanumerics
+          # removed ("Spotify Alarm" -> SpotifyAlarm), but detect it instead of guessing.
+          WORKSPACE_DIR="$(ls -d ios/*.xcworkspace 2>/dev/null | head -n 1 || true)"
+          PROJECT_DIR="$(ls -d ios/*.xcodeproj | head -n 1)"
+          NAME="$(basename "$PROJECT_DIR" .xcodeproj)"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Project: $PROJECT_DIR (workspace before pod install: ${WORKSPACE_DIR:-none yet})"
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          # Podfile.lock does not exist before `pod install` (ios/ is regenerated each run),
+          # so key on what determines it: the generated Podfile, npm lockfile and local podspecs.
+          key: pods-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ios/Podfile', 'ios/Podfile.properties.json', 'package-lock.json', 'modules/**/*.podspec') }}
+          restore-keys: |
+            pods-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: pod install
+
+      - name: Build (Debug, iphoneos, no signing)
+        run: |
+          set -euo pipefail
+          NAME="${{ steps.xcode.outputs.name }}"
+          WORKSPACE="ios/$NAME.xcworkspace"
+          if [ ! -d "$WORKSPACE" ]; then
+            WORKSPACE="$(ls -d ios/*.xcworkspace | head -n 1)"
+          fi
+          # The app scheme has the same name as the project; if it is missing, fall back
+          # to the first scheme that is not a Pods target.
+          SCHEME="$(xcodebuild -list -json -workspace "$WORKSPACE" | NAME="$NAME" node -e '
+            let s = "";
+            process.stdin.on("data", (d) => (s += d)).on("end", () => {
+              const schemes = JSON.parse(s).workspace.schemes;
+              const pick = schemes.includes(process.env.NAME)
+                ? process.env.NAME
+                : schemes.find((x) => !x.startsWith("Pods") && !x.includes("-"));
+              if (!pick) { console.error("No scheme found in " + schemes.join(", ")); process.exit(1); }
+              console.log(pick);
+            });
+          ')"
+          echo "Workspace: $WORKSPACE  Scheme: $SCHEME"
+          mkdir -p build
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build > build/xcodebuild.log 2>&1 || {
+              echo "::error::xcodebuild failed. First errors (full log is uploaded as an artifact):"
+              grep -E '(error:|\*\* BUILD FAILED)' build/xcodebuild.log | head -n 50 || true
+              tail -n 80 build/xcodebuild.log
+              exit 1
+            }
+          tail -n 5 build/xcodebuild.log
+
+      - name: Package .ipa
+        id: package
+        run: |
+          set -euo pipefail
+          PRODUCTS="build/DerivedData/Build/Products/Debug-iphoneos"
+          # The main app is the .app that is not inside another bundle.
+          APP="$(find "$PRODUCTS" -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ -z "$APP" ]; then echo "::error::No .app found in $PRODUCTS"; exit 1; fi
+          echo "App: $APP"
+          rm -rf Payload "$IPA_NAME"
+          mkdir Payload
+          # Copy the .app as built, including PlugIns/*.appex and Frameworks/ (do not strip).
+          cp -R "$APP" Payload/
+          zip -qry "$IPA_NAME" Payload
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+          echo "bundle_id=$BUNDLE_ID" >> "$GITHUB_OUTPUT"
+          echo "app_name=$(basename "$APP")" >> "$GITHUB_OUTPUT"
+          {
+            echo "appex<<EOF"
+            if [ -d "$APP/PlugIns" ]; then
+              find "$APP/PlugIns" -maxdepth 1 -name '*.appex' -exec basename {} \; | while read -r EXT; do
+                EXT_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/PlugIns/$EXT/Info.plist" 2>/dev/null || echo '?')"
+                echo "- \`$EXT\` (\`$EXT_ID\`)"
+              done
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          ls -lh "$IPA_NAME"
+
+      - name: Upload .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpotifyAlarm-dev-unsigned-${{ github.run_number }}
+          path: ${{ env.IPA_NAME }}
+          retention-days: 14
+          if-no-files-found: error
+          # The .ipa is already a zip; don't recompress it.
+          compression-level: 0
+
+      - name: Job summary
+        env:
+          BUNDLE_ID: ${{ steps.package.outputs.bundle_id }}
+          APP_NAME: ${{ steps.package.outputs.app_name }}
+          APPEX: ${{ steps.package.outputs.appex }}
+        run: |
+          {
+            echo "## Unsigned iOS development build"
+            echo ""
+            echo "- App: \`$APP_NAME\`"
+            echo "- Bundle id: \`$BUNDLE_ID\`"
+            echo "- Commit: \`${GITHUB_SHA::7}\`"
+            echo "- Xcode: $(xcodebuild -version | head -n 1), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
+            echo ""
+            if [ -n "$APPEX" ]; then
+              echo "App extensions included:"
+              echo "$APPEX"
+            else
+              echo "App extensions included: none"
+            fi
+            echo ""
+            echo "### Install with Sideloadly (Windows)"
+            echo "1. Download the **SpotifyAlarm-dev-unsigned-${GITHUB_RUN_NUMBER}** artifact below and unzip it to get \`$IPA_NAME\`."
+            echo "2. Plug in the iPhone, open Sideloadly, drag the .ipa in, enter your Apple ID, click **Start**."
+            echo "3. On the iPhone: Settings > General > VPN & Device Management > trust your Apple ID. Developer Mode must be on."
+            echo "4. On the PC run \`npx expo start\` and open the app (same Wi-Fi, or \`npx expo start --tunnel\`)."
+            echo ""
+            echo "Free Apple ID signatures expire after 7 days: re-sign with Sideloadly. Full guide: \`docs/ios-sideload.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log-${{ github.run_number }}
+          path: build/xcodebuild.log
+          retention-days: 7
+          if-no-files-found: ignore

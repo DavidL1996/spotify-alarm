@@ -34,6 +34,8 @@ npx expo install <pkg>  # always add packages this way, it picks SDK-compatible 
 
 Recommended editor: **VS Code**.
 
+**Development build on iPhone (no Mac, free Apple ID):** GitHub Actions builds an unsigned `.ipa` and you install it with Sideloadly. See [docs/ios-sideload.md](docs/ios-sideload.md).
+
 ## Project layout
 
 ```
