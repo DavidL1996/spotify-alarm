@@ -68,3 +68,4 @@ src/
 
 - ~~**Step 2:** local notifications for each enabled alarm.~~ Done. A custom alarm sound needs a development build, so it moves to step 3.
 - **Step 3 (needs Apple Developer account + EAS dev build):** native module for AlarmKit + Spotify iOS SDK shuffle-play.
+  Spotify shuffle-play needs a Spotify Developer app and Client ID: see [docs/spotify-setup.md](docs/spotify-setup.md).

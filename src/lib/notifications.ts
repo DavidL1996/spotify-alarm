@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
-import { openPlaylistInSpotify } from './spotify';
+import { playPlaylistShuffled } from './spotify';
 import { formatTime } from './time';
 import type { Alarm } from './types';
 
@@ -140,7 +140,7 @@ export function syncAlarmNotifications(alarms: Alarm[]): Promise<boolean> {
 }
 
 /**
- * When the user taps an alarm notification, open its playlist in Spotify.
+ * When the user taps an alarm notification, shuffle-play its playlist in Spotify.
  * Covers both cases: app already running, and app launched by the tap.
  */
 export function useOpenSpotifyOnNotificationTap(): void {
@@ -155,7 +155,7 @@ export function useOpenSpotifyOnNotificationTap(): void {
       handled.add(id);
 
       const data = response.notification.request.content.data as Partial<AlarmNotificationData>;
-      if (data.playlistId) openPlaylistInSpotify(data.playlistId).catch(() => undefined);
+      if (data.playlistId) playPlaylistShuffled(data.playlistId).catch(() => undefined);
       // Clear it so the same tap isn't replayed the next time the app starts.
       Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
     };
