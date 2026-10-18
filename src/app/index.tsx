@@ -11,7 +11,7 @@ import { useTheme } from '@/lib/theme';
 export default function AlarmListScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const { alarms, loaded, notificationsAllowed, updateAlarm } = useAlarms();
+  const { alarms, loaded, notificationsAllowed, alarmKitDenied, updateAlarm } = useAlarms();
 
   // Re-render once a minute so "Rings in ..." stays accurate.
   const [now, setNow] = useState(() => new Date());
@@ -64,6 +64,19 @@ export default function AlarmListScreen() {
                   <Text style={[styles.warningTitle, { color: theme.danger }]}>Notifications are off</Text>
                   <Text style={[styles.warningText, { color: theme.text }]}>
                     Your alarms can’t ring. Tap to open Settings and allow notifications.
+                  </Text>
+                </Pressable>
+              )}
+              {alarmKitDenied && notificationsAllowed !== false && (
+                <Pressable
+                  onPress={() => Linking.openSettings()}
+                  style={[styles.warning, { backgroundColor: theme.card, borderColor: theme.danger }]}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.warningTitle, { color: theme.danger }]}>Alarms permission is off</Text>
+                  <Text style={[styles.warningText, { color: theme.text }]}>
+                    Alarms ring as plain notifications, which stay quiet in silent mode and Focus. Tap to
+                    open Settings and allow Alarms.
                   </Text>
                 </Pressable>
               )}
