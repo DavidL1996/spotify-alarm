@@ -24,8 +24,10 @@ Points marked **(unverified)** come from Spotify's docs or blog posts, but I cou
    - **App name**: `Spotify Alarm` (shown to you on Spotify's consent screen)
    - **App description**: anything, e.g. `Personal alarm clock`
    - **Website**: optional
-   - **Redirect URIs**: `spotifyalarm://spotify-login-callback` (type it exactly, lowercase, then click **Add**)
-   - **Which API/SDKs are you planning to use?** tick **iOS**. (You don't need Web API or Android.)
+   - **Redirect URIs**: add both, typed exactly in lowercase, clicking **Add** after each:
+     - `spotifyalarm://spotify-login-callback` (Spotify iOS SDK)
+     - `spotifyalarm://spotify-web-callback` (Web API login, used by the night mode test)
+   - **Which API/SDKs are you planning to use?** tick **iOS** and **Web API**.
 3. Tick the terms checkbox and click **Save**.
 4. Open the app's **Settings** (Edit) and, under **iOS app bundles / Bundle IDs**, add
    `com.davidljungberg.spotifyalarm`, then **Save**. **(unverified: the exact label of this field)**

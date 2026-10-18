@@ -29,6 +29,11 @@ export default function AlarmListScreen() {
     <>
       <Stack.Screen
         options={{
+          headerLeft: () => (
+            <Pressable onPress={() => router.push('/night-test')} hitSlop={12} accessibilityRole="button">
+              <Text style={[styles.headerLink, { color: theme.accent }]}>Night test</Text>
+            </Pressable>
+          ),
           headerRight: () => (
             <Pressable
               onPress={() => router.push('/alarm/new')}
@@ -109,6 +114,7 @@ export default function AlarmListScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { padding: 16, paddingBottom: 48 },
+  headerLink: { fontSize: 17, paddingHorizontal: 4 },
   addButton: { fontSize: 28, fontWeight: '400', paddingHorizontal: 4 },
   next: { fontSize: 15, marginBottom: 12, marginLeft: 4 },
   warning: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 16, gap: 4 },

@@ -25,6 +25,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ title: 'Alarms', headerLargeTitle: true }} />
         <Stack.Screen name="alarm/[id]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="night-test" options={{ title: 'Night mode test' }} />
       </Stack>
     </AlarmsProvider>
   );

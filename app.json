@@ -37,7 +37,16 @@
           "clientId": ""
         }
       ],
-      "./modules/alarm-kit/app.plugin.js"
+      "./modules/alarm-kit/app.plugin.js",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "enableBackgroundPlayback": true
+        }
+      ],
+      "expo-web-browser",
+      "expo-asset"
     ],
     "scheme": "spotifyalarm",
     "experiments": {

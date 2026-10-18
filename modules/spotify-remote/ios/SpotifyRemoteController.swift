@@ -15,6 +15,10 @@ struct SpotifyRemoteFailure: Error {
   static let notInstalled = SpotifyRemoteFailure(code: "SPOTIFY_NOT_INSTALLED", message: "The Spotify app is not installed.")
   static let cancelled = SpotifyRemoteFailure(code: "CANCELLED", message: "Replaced by a newer playback request.")
   static let timeout = SpotifyRemoteFailure(code: "TIMEOUT", message: "Spotify did not respond in time.")
+  static let notConnected = SpotifyRemoteFailure(
+    code: "NOT_CONNECTED",
+    message: "Not connected to Spotify and no access token yet. Call connectForNight first, while the app is open."
+  )
 }
 
 /**
@@ -55,6 +59,10 @@ final class SpotifyRemoteController: NSObject, SPTAppRemoteDelegate {
     let uri: String
     let completion: Completion
     var stage: Stage
+    /// Night mode: stay connected after playback starts (normal taps disconnect when done).
+    var keepConnected = false
+    /// Night mode setup: start the playlist with shuffle on, then pause it right away.
+    var pauseAfterStart = false
   }
 
   private static let maxConnectAttempts = 5
@@ -65,6 +73,12 @@ final class SpotifyRemoteController: NSObject, SPTAppRemoteDelegate {
   private var appRemote: SPTAppRemote?
   private var request: Request?
   private var connectAttempts = 0
+
+  /// Night mode experiment: told about every connect/disconnect so JS can log when Spotify drops us.
+  /// Set by SpotifyRemoteModule. Always called on the main thread.
+  var onConnectionChange: ((_ connected: Bool, _ error: String?) -> Void)?
+
+  var isConnected: Bool { appRemote?.isConnected ?? false }
 
   // MARK: Configuration (written to Info.plist by modules/spotify-remote/app.plugin.js)
 
@@ -90,6 +104,29 @@ final class SpotifyRemoteController: NSObject, SPTAppRemoteDelegate {
   // MARK: Entry points (main thread)
 
   func playShuffled(uri: String, completion: @escaping Completion) {
+    begin(uri: uri, keepConnected: false, pauseAfterStart: false, allowAuthorize: true, completion: completion)
+  }
+
+  /// Night mode setup (app in the foreground): opens Spotify once, starts the playlist with shuffle on,
+  /// pauses it, and stays connected so `playIfConnected` can start it later from the background.
+  func connectForNight(uri: String, completion: @escaping Completion) {
+    begin(uri: uri, keepConnected: true, pauseAfterStart: true, allowAuthorize: true, completion: completion)
+  }
+
+  /// Night mode alarm (may run in the background): never opens the Spotify app, because iOS doesn't
+  /// allow that from the background. Uses the open connection, or reconnects with the token we got
+  /// from `connectForNight`; that only works if Spotify is still running.
+  func playIfConnected(uri: String, completion: @escaping Completion) {
+    begin(uri: uri, keepConnected: true, pauseAfterStart: false, allowAuthorize: false, completion: completion)
+  }
+
+  private func begin(
+    uri: String,
+    keepConnected: Bool,
+    pauseAfterStart: Bool,
+    allowAuthorize: Bool,
+    completion: @escaping Completion
+  ) {
     guard uri.hasPrefix("spotify:") else {
       completion(.failure(.invalidURI))
       return
@@ -112,14 +149,31 @@ final class SpotifyRemoteController: NSObject, SPTAppRemoteDelegate {
       self.finish(.failure(.timeout))
     }
 
+    var newRequest = Request(id: id, uri: uri, completion: completion, stage: .playing)
+    newRequest.keepConnected = keepConnected
+    newRequest.pauseAfterStart = pauseAfterStart
+
     if remote.isConnected {
       // Still connected from earlier: no need to bounce through the Spotify app.
-      request = Request(id: id, uri: uri, completion: completion, stage: .playing)
+      request = newRequest
       startShuffledPlayback()
       return
     }
 
-    request = Request(id: id, uri: uri, completion: completion, stage: .authorizing)
+    if !allowAuthorize {
+      guard remote.connectionParameters.accessToken != nil else {
+        request = newRequest
+        finish(.failure(.notConnected))
+        return
+      }
+      newRequest.stage = .connecting
+      request = newRequest
+      connect()
+      return
+    }
+
+    newRequest.stage = .authorizing
+    request = newRequest
     // SPTAppRemote.h: "Open Spotify app to obtain access token and start playback. The passed URI will
     // start playing unless Spotify is already playing." The BOOL only says whether Spotify is installed.
     remote.authorizeAndPlayURI(uri, asRadio: false) { [weak self] spotifyInstalled in
@@ -157,6 +211,7 @@ final class SpotifyRemoteController: NSObject, SPTAppRemoteDelegate {
 
   func appRemoteDidEstablishConnection(_ appRemote: SPTAppRemote) {
     DispatchQueue.main.async {
+      self.onConnectionChange?(true, nil)
       guard self.request?.stage == .connecting else { return }
       self.request?.stage = .playing
       self.startShuffledPlayback()
@@ -181,6 +236,7 @@ final class SpotifyRemoteController: NSObject, SPTAppRemoteDelegate {
 
   func appRemote(_ appRemote: SPTAppRemote, didDisconnectWithError error: Error?) {
     DispatchQueue.main.async {
+      self.onConnectionChange?(false, error?.localizedDescription)
       guard self.request?.stage == .playing else { return }
       let message = error?.localizedDescription ?? "Disconnected from the Spotify app."
       self.finish(.failure(SpotifyRemoteFailure(code: "DISCONNECTED", message: message)))
@@ -227,6 +283,19 @@ final class SpotifyRemoteController: NSObject, SPTAppRemoteDelegate {
               self.finish(.failure(SpotifyRemoteFailure(code: "PLAYER_ERROR", message: "setShuffle: \(error.localizedDescription)")))
               return
             }
+            if current.pauseAfterStart {
+              // Night mode setup: we only needed Spotify running and connected, not music at bedtime.
+              player.pause { [weak self] _, error in
+                DispatchQueue.main.async {
+                  guard let self = self, self.request?.id == id else { return }
+                  if let error = error {
+                    NSLog("[SpotifyRemote] pause failed: %@", error.localizedDescription)
+                  }
+                  self.finish(.success(()))
+                }
+              }
+              return
+            }
             // With shuffle now on, "next" is a random track from the playlist.
             player.skip(toNext: { [weak self] _, error in
               DispatchQueue.main.async {
@@ -248,7 +317,8 @@ final class SpotifyRemoteController: NSObject, SPTAppRemoteDelegate {
     guard let current = request else { return }
     request = nil
     // Spotify's docs disconnect when the app resigns active; we're done with the connection anyway.
-    if let remote = appRemote, remote.isConnected {
+    // Night mode keeps it open on purpose: that's the thing being tested.
+    if !current.keepConnected, let remote = appRemote, remote.isConnected {
       remote.disconnect()
     }
     current.completion(result)
