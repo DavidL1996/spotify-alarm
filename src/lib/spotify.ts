@@ -1,5 +1,7 @@
 import * as Linking from 'expo-linking';
 
+import * as SpotifyRemote from '../../modules/spotify-remote';
+
 // Spotify IDs are 22 characters of base62 (0-9, a-z, A-Z).
 const ID_PATTERN = /^[0-9A-Za-z]{22}$/;
 
@@ -30,7 +32,7 @@ export function playlistWebUrl(id: string): string {
 
 /**
  * Opens the playlist in the Spotify app (falls back to the web player).
- * In step 3 this gets replaced by the Spotify iOS SDK so we can force shuffle-play.
+ * Used directly in Expo Go, and as the fallback for playPlaylistShuffled.
  */
 export async function openPlaylistInSpotify(id: string): Promise<void> {
   const appUrl = `spotify:playlist:${id}`;
@@ -43,4 +45,25 @@ export async function openPlaylistInSpotify(id: string): Promise<void> {
     // Fall through to the web URL.
   }
   await Linking.openURL(playlistWebUrl(id));
+}
+
+/**
+ * Starts the playlist in Spotify with shuffle on, via the Spotify iOS SDK (modules/spotify-remote).
+ * Only works in an iOS development build with a Spotify Client ID configured (docs/spotify-setup.md).
+ * Everywhere else (Expo Go, Android, web, or if the SDK fails) it just opens the playlist.
+ * Returns which of the two happened.
+ */
+export async function playPlaylistShuffled(id: string): Promise<'shuffled' | 'opened'> {
+  if (SpotifyRemote.isAvailable()) {
+    try {
+      await SpotifyRemote.playPlaylistShuffled(`spotify:playlist:${id}`);
+      return 'shuffled';
+    } catch (error) {
+      // A newer request replaced this one; that request takes care of playback.
+      if ((error as { code?: string } | null)?.code === 'CANCELLED') return 'shuffled';
+      console.warn('Spotify shuffle-play failed, opening the playlist instead', error);
+    }
+  }
+  await openPlaylistInSpotify(id);
+  return 'opened';
 }
